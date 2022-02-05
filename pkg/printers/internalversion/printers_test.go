@@ -1499,6 +1499,119 @@ func TestPrintPod(t *testing.T) {
 			},
 			[]metav1.TableRow{{Cells: []interface{}{"test14", "2/2", "Running", "9 (5d ago)", "<unknown>"}}},
 		},
+		{
+			// Test pod has 2 containers, both are completed
+			api.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test15"},
+				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
+				Status: api.PodStatus{
+					Phase: "Succeeded",
+					ContainerStatuses: []api.ContainerStatus{
+						{
+							Ready:        false,
+							RestartCount: 0,
+							State:        api.ContainerState{Terminated: &api.ContainerStateTerminated{Reason: "Completed"}},
+						},
+						{
+							Ready:        false,
+							RestartCount: 0,
+							State:        api.ContainerState{Terminated: &api.ContainerStateTerminated{Reason: "Completed"}},
+						},
+					},
+				},
+			},
+			[]metav1.TableRow{
+				{
+					Cells:      []interface{}{"test15", "0/2", "Completed", "0", "<unknown>"},
+					Conditions: podSuccessConditions,
+				},
+			},
+		},
+		{
+			// Test pod has 2 containers, the first one is completed, the second one has error
+			api.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test16"},
+				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
+				Status: api.PodStatus{
+					Phase: "Failed",
+					ContainerStatuses: []api.ContainerStatus{
+						{
+							Ready:        false,
+							RestartCount: 0,
+							State:        api.ContainerState{Terminated: &api.ContainerStateTerminated{Reason: "Completed"}},
+						},
+						{
+							Ready:        false,
+							RestartCount: 0,
+							State:        api.ContainerState{Terminated: &api.ContainerStateTerminated{Reason: "Error"}},
+						},
+					},
+				},
+			},
+			[]metav1.TableRow{
+				{
+					Cells:      []interface{}{"test16", "0/2", "Error", "0", "<unknown>"},
+					Conditions: podFailedConditions,
+				},
+			},
+		},
+		{
+			// Test pod has 2 containers, the first one doesn't have terminated reason nor signal, the second is completed
+			api.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test17"},
+				Spec:       api.PodSpec{Containers: make([]api.Container, 2)},
+				Status: api.PodStatus{
+					Phase: "Failed",
+					ContainerStatuses: []api.ContainerStatus{
+						{
+							Ready:        false,
+							RestartCount: 0,
+							State:        api.ContainerState{Terminated: &api.ContainerStateTerminated{ExitCode: 1}},
+						},
+						{
+							Ready:        false,
+							RestartCount: 0,
+							State:        api.ContainerState{Terminated: &api.ContainerStateTerminated{Reason: "Completed"}},
+						},
+					},
+				},
+			},
+			[]metav1.TableRow{
+				{
+					Cells:      []interface{}{"test17", "0/2", "ExitCode:1", "0", "<unknown>"},
+					Conditions: podFailedConditions,
+				},
+			},
+		},
+		{
+			// Test pod has 2 init containers, one is completed and the other one has error, and 1 container not running
+			api.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "test18"},
+				Spec:       api.PodSpec{InitContainers: make([]api.Container, 2), Containers: make([]api.Container, 1)},
+				Status: api.PodStatus{
+					Phase: "podPhase",
+					InitContainerStatuses: []api.ContainerStatus{
+						{
+							Ready:        false,
+							RestartCount: 0,
+							State:        api.ContainerState{Terminated: &api.ContainerStateTerminated{Reason: "Completed"}},
+						},
+						{
+							Ready:        false,
+							RestartCount: 0,
+							State:        api.ContainerState{Terminated: &api.ContainerStateTerminated{Reason: "Error", ExitCode: 1}},
+						},
+					},
+					ContainerStatuses: []api.ContainerStatus{
+						{
+							Ready: false,
+							State: api.ContainerState{Waiting: &api.ContainerStateWaiting{}},
+						},
+					},
+				},
+			},
+			[]metav1.TableRow{{Cells: []interface{}{"test18", "0/1", "Init:Error", "0", "<unknown>"}}},
+		},
 	}
 
 	for i, test := range tests {

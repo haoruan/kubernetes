@@ -775,15 +775,9 @@ func printPod(pod *api.Pod, options printers.GenerateOptions) ([]metav1.TableRow
 			continue
 		case container.State.Terminated != nil:
 			// initialization is failed
-			if len(container.State.Terminated.Reason) == 0 {
-				if container.State.Terminated.Signal != 0 {
-					reason = fmt.Sprintf("Init:Signal:%d", container.State.Terminated.Signal)
-				} else {
-					reason = fmt.Sprintf("Init:ExitCode:%d", container.State.Terminated.ExitCode)
-				}
-			} else {
-				reason = "Init:" + container.State.Terminated.Reason
-			}
+			// in this case, the container won't have completed status,
+			// so it's safe to set the last param to true
+			makeTerminatedReason(container.State.Terminated, "Init:", &reason, true)
 			initializing = true
 		case container.State.Waiting != nil && len(container.State.Waiting.Reason) > 0 && container.State.Waiting.Reason != "PodInitializing":
 			reason = "Init:" + container.State.Waiting.Reason
@@ -797,6 +791,7 @@ func printPod(pod *api.Pod, options printers.GenerateOptions) ([]metav1.TableRow
 	if !initializing {
 		restarts = 0
 		hasRunning := false
+		hasTerminatedReason := false
 		for i := len(pod.Status.ContainerStatuses) - 1; i >= 0; i-- {
 			container := pod.Status.ContainerStatuses[i]
 
@@ -809,14 +804,9 @@ func printPod(pod *api.Pod, options printers.GenerateOptions) ([]metav1.TableRow
 			}
 			if container.State.Waiting != nil && container.State.Waiting.Reason != "" {
 				reason = container.State.Waiting.Reason
-			} else if container.State.Terminated != nil && container.State.Terminated.Reason != "" {
-				reason = container.State.Terminated.Reason
-			} else if container.State.Terminated != nil && container.State.Terminated.Reason == "" {
-				if container.State.Terminated.Signal != 0 {
-					reason = fmt.Sprintf("Signal:%d", container.State.Terminated.Signal)
-				} else {
-					reason = fmt.Sprintf("ExitCode:%d", container.State.Terminated.ExitCode)
-				}
+			} else if container.State.Terminated != nil {
+				makeTerminatedReason(container.State.Terminated, "", &reason, hasTerminatedReason)
+				hasTerminatedReason = true
 			} else if container.Ready && container.State.Running != nil {
 				hasRunning = true
 				readyContainers++
@@ -892,6 +882,21 @@ func hasPodReadyCondition(conditions []api.PodCondition) bool {
 		}
 	}
 	return false
+}
+
+func makeTerminatedReason(containerStateTerminated *api.ContainerStateTerminated, reasonPrefix string, reason *string, hasTerminatedReason bool) {
+	if containerStateTerminated.Reason != "" {
+		// change pod status out of "Completed" if there is an container not reporting "Completed" status
+		if !hasTerminatedReason || containerStateTerminated.Reason != reasonPrefix+"Completed" {
+			*reason = reasonPrefix + containerStateTerminated.Reason
+		}
+	} else {
+		if containerStateTerminated.Signal != 0 {
+			*reason = reasonPrefix + fmt.Sprintf("Signal:%d", containerStateTerminated.Signal)
+		} else {
+			*reason = reasonPrefix + fmt.Sprintf("ExitCode:%d", containerStateTerminated.ExitCode)
+		}
+	}
 }
 
 func printPodTemplate(obj *api.PodTemplate, options printers.GenerateOptions) ([]metav1.TableRow, error) {
