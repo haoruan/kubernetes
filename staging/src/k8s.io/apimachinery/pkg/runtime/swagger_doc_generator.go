@@ -108,7 +108,9 @@ func fieldName(field *ast.Field) string {
 		if field.Names != nil {
 			return field.Names[0].Name
 		}
-		return field.Type.(*ast.Ident).Name
+		if filedType, ok := field.Type.(*ast.Ident); ok {
+			return filedType.Name
+		}
 	}
 	return jsonTag
 }
@@ -182,7 +184,7 @@ func ParseDocumentationFrom(src string) []KubeTypes {
 			ks = append(ks, Pair{kubType.Name, fmtRawDoc(kubType.Doc)})
 
 			for _, field := range structType.Fields.List {
-				if n := fieldName(field); n != "-" {
+				if n := fieldName(field); n != "-" && n != "" {
 					fieldDoc := fmtRawDoc(field.Doc.Text())
 					ks = append(ks, Pair{n, fieldDoc})
 				}
